@@ -1,0 +1,207 @@
+# Tiled Map Editor CLI
+
+A stateful command-line interface for 2D tilemap editing, built on direct
+TMX/JSON manipulation with Tiled CLI backend for PNG rendering. Designed
+for AI agents creating room interiors for AI Town (Conpera Town).
+
+## Prerequisites
+
+- Python 3.10+
+- `click` (CLI framework)
+- `prompt-toolkit` (interactive REPL)
+- Tiled Map Editor (for PNG export): https://www.mapeditor.org/
+
+## Install
+
+```bash
+cd agent-harness
+pip install -e .
+```
+
+Or install Tiled for PNG rendering:
+```bash
+# macOS
+brew install tiled
+
+# Linux
+sudo apt install tiled
+# or
+sudo snap install tiled
+```
+
+## How to Run
+
+### One-shot commands
+
+```bash
+# Show help
+cli-anything-tiled --help
+
+# Create a new map
+cli-anything-tiled map new --width 10 --height 8 --name "shop" -o shop.tmx
+
+# Create from template
+cli-anything-tiled map new --template shop --name "general_store" -o shop.json
+
+# Open a map and inspect
+cli-anything-tiled --map shop.tmx map info
+
+# JSON output (for agent consumption)
+cli-anything-tiled --json --map shop.tmx layer list
+```
+
+### Interactive REPL
+
+```bash
+cli-anything-tiled
+cli-anything-tiled repl --map shop.tmx
+```
+
+Inside the REPL, type `help` for all available commands.
+
+## Command Reference
+
+### Map
+
+```bash
+map new [--width W] [--height H] [--tile-width T] [--tile-height T]
+        [--name N] [--orientation O] [--template T] [-o path]
+map open <path>
+map info
+map resize --width W --height H [--anchor A]
+map save [path] [--overwrite]
+map export <path> [--format tmx|json] [--overwrite]
+map templates
+```
+
+Templates: `room-small`, `room-medium`, `room-large`, `shop`, `house`,
+`dungeon`, `outdoor`
+
+### Layer
+
+```bash
+layer list
+layer add [--name N] [--type tilelayer|objectgroup] [--position P]
+layer remove <index>
+layer rename <index> <new-name>
+layer fill <index> <tile-id>
+layer paint-tile <index> --x X --y Y --id TILE_ID
+layer paint-rect <index> --x1 X --y1 Y --x2 X --y2 Y --id TILE_ID
+layer info <index>
+layer set <index> <property> <value>
+```
+
+Layer properties: `visible` (true/false), `opacity` (0.0-1.0), `name`
+
+### Tileset
+
+```bash
+tileset list
+tileset add --name N --image PATH [--tile-width W] [--tile-height H]
+            [--columns C] [--image-width IW] [--image-height IH]
+tileset import <tsx-path>
+tileset info <index>
+tileset remove <index>
+```
+
+### Object
+
+```bash
+object list [--layer L]
+object add --name N [--type T] [--tile-x X] [--tile-y Y]
+           [--tile-w W] [--tile-h H] [--layer L]
+object remove <obj-id>
+object set-property <obj-id> <name> <value> [--type string|int|float|bool]
+object move <obj-id> [--tile-x X] [--tile-y Y]
+```
+
+Object types: `spawn`, `exit`, `interact`, `blocked`, `counter`, `work`,
+`forge`, `desk`, `shop`, `wall`, `obstacle`
+
+### Tile
+
+```bash
+tile get <x> <y> [--layer L]
+tile set <x> <y> --id TILE_ID [--layer L]
+tile check-collision <x> <y>
+tile get-all <x> <y>
+tile region --x1 X --y1 Y --x2 X --y2 Y [--layer L]
+```
+
+### Export
+
+```bash
+export to-json <path> [--overwrite]
+export to-tmx <path> [--overwrite]
+export to-png <path> [--overwrite]           # Requires Tiled installed
+export to-convex <path> [--scene-name S] [--display-name D]
+                        [--tileset-path P] [--overwrite]
+export check                                 # Check Tiled CLI availability
+```
+
+### Session
+
+```bash
+session status
+session undo
+session redo
+session history
+session select-layer <index>
+```
+
+## JSON Mode
+
+Add `--json` before the subcommand for machine-readable output:
+
+```bash
+cli-anything-tiled --json --map room.tmx layer list
+cli-anything-tiled --json map new -o room.json
+```
+
+## Running Tests
+
+```bash
+cd agent-harness
+python3 -m pytest cli_anything/tiled/tests/test_core.py -v
+python3 -m pytest cli_anything/tiled/tests/test_full_e2e.py -v -s
+python3 -m pytest cli_anything/tiled/tests/ -v
+```
+
+## Example Workflow: Build a Shop Interior
+
+```bash
+# Create a shop room from template
+cli-anything-tiled map new --template shop --name "general_store" -o shop.json
+
+# Add tileset
+cli-anything-tiled --map shop.json tileset add \
+  --name "gentle-obj" --image "gentle-obj.png" \
+  --tile-width 32 --tile-height 32 \
+  --image-width 1440 --image-height 1024
+
+# Fill ground layer with floor tiles
+cli-anything-tiled --map shop.json layer fill 0 1
+
+# Paint walls around the edges
+cli-anything-tiled --map shop.json layer add --name "Walls"
+cli-anything-tiled --map shop.json layer paint-rect 1 --x1 0 --y1 0 --x2 9 --y2 0 --id 5
+cli-anything-tiled --map shop.json layer paint-rect 1 --x1 0 --y1 7 --x2 9 --y2 7 --id 5
+
+# Add furniture objects
+cli-anything-tiled --map shop.json object add --name "Counter" --type interact \
+  --tile-x 3 --tile-y 2 --tile-w 2 --tile-h 1
+cli-anything-tiled --map shop.json object set-property 1 action buy_food
+
+# Add spawn and exit
+cli-anything-tiled --map shop.json object add --name "Spawn" --type spawn \
+  --tile-x 5 --tile-y 6
+cli-anything-tiled --map shop.json object add --name "Exit" --type exit \
+  --tile-x 5 --tile-y 7
+
+# Export to Convex format for AI Town
+cli-anything-tiled --map shop.json export to-convex shop_convex.json \
+  --scene-name "general_store" --display-name "General Store" --overwrite
+
+# View the result
+cli-anything-tiled --json --map shop.json map info
+```

@@ -1,0 +1,2 @@
+[console_scripts]
+cli-anything-tiled = cli_anything.tiled.tiled_cli:main
